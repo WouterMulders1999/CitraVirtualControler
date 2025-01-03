@@ -1,0 +1,216 @@
+import math
+import pyvjoy
+import tkinter as tk
+from tkinter import ttk
+
+# Create a virtual joystick object (Device ID 1)
+joy = pyvjoy.VJoyDevice(1)
+
+# Function to reset joystick (this ensures no button or axis is left pressed)
+def reset_joystick():
+    for button in range(1, 13):  # Assuming there are 12 buttons
+        joy.set_button(button, 0)
+    joy.set_axis(pyvjoy.HID_USAGE_X, 0x4000)  # X-axis center
+    joy.set_axis(pyvjoy.HID_USAGE_Y, 0x4000)  # Y-axis center
+    joy.set_axis(pyvjoy.HID_USAGE_Z, 0x4000)  # Z-axis center (if used)
+
+# Function to update button state (A, B, L, R, Start, Select)
+def update_button_state():
+    joy.set_button(1, var_a.get())  # A button
+    joy.set_button(2, var_b.get())  # B button
+    joy.set_button(3, var_l.get())  # L button
+    joy.set_button(4, var_r.get())  # R button
+    joy.set_button(9, var_start.get())  # Start button
+    joy.set_button(10, var_select.get())  # Select button
+
+# Function to handle D-pad button presses
+def handle_dpad(direction, state):
+    button_map = {"Up": 5, "Down": 6, "Left": 7, "Right": 8}
+    joy.set_button(button_map[direction], state)
+
+# Function to update analog stick position based on input fields (dynamic update)
+def update_analog_position_from_input(event=None):
+    try:
+        # Get the values from the angle and magnitude entry fields
+        angle_deg = float(angle_entry.get())  # Angle in degrees
+        magnitude = float(magnitude_entry.get())  # Magnitude (distance from center)
+
+        # Clamp the magnitude within the valid range (analog_radius)
+        if magnitude > analog_radius:
+            magnitude = analog_radius
+
+        # Convert angle to radians
+        angle_rad = math.radians(angle_deg)
+
+        # Calculate the delta_x and delta_y based on the angle and magnitude
+        delta_x = magnitude * math.cos(angle_rad)
+        delta_y = magnitude * math.sin(angle_rad)
+
+        # Update the position of the red dot (analog stick)
+        analog_canvas.coords(analog_stick, analog_center[0] + delta_x - 10, analog_center[1] + delta_y - 10,
+                             analog_center[0] + delta_x + 10, analog_center[1] + delta_y + 10)
+
+        # Map the joystick range to axes
+        axis_x = int((delta_x) * 0x8000 / analog_radius + 0x4000)
+        axis_y = int((delta_y) * 0x8000 / analog_radius + 0x4000)
+
+        # Clamp values to joystick range
+        axis_x = max(0x0000, min(0x8000, axis_x))
+        axis_y = max(0x0000, min(0x8000, axis_y))
+
+        # Set joystick axes
+        joy.set_axis(pyvjoy.HID_USAGE_X, axis_x)
+        joy.set_axis(pyvjoy.HID_USAGE_Y, axis_y)
+    except ValueError:
+        pass  # Ignore invalid input if it's not a number
+
+# Function to handle mouse drag for analog stick
+def on_analog_drag(event):
+    # Calculate the position of the red dot relative to the center of the analog stick
+    delta_x = event.x - analog_center[0]
+    delta_y = event.y - analog_center[1]
+
+    # Calculate distance and clamp within the maximum radius
+    distance = (delta_x**2 + delta_y**2)**0.5
+    if distance > analog_radius:
+        angle = math.atan2(delta_y, delta_x)
+        delta_x = analog_radius * math.cos(angle)
+        delta_y = analog_radius * math.sin(angle)
+
+    # Update the position of the red dot (analog stick)
+    analog_canvas.coords(analog_stick, analog_center[0] + delta_x - 10, analog_center[1] + delta_y - 10,
+                         analog_center[0] + delta_x + 10, analog_center[1] + delta_y + 10)
+
+    # Update the angle and magnitude fields dynamically
+    angle_deg = math.degrees(math.atan2(delta_y, delta_x))
+    magnitude = min(distance, analog_radius)
+
+    angle_entry.delete(0, tk.END)
+    angle_entry.insert(0, f"{angle_deg:.2f}")  # Display the angle in degrees
+    magnitude_entry.delete(0, tk.END)
+    magnitude_entry.insert(0, f"{magnitude:.2f}")  # Display the magnitude
+
+    # Map the joystick range to axes
+    axis_x = int((delta_x) * 0x8000 / analog_radius + 0x4000)
+    axis_y = int((delta_y) * 0x8000 / analog_radius + 0x4000)
+
+    # Clamp values to joystick range
+    axis_x = max(0x0000, min(0x8000, axis_x))
+    axis_y = max(0x0000, min(0x8000, axis_y))
+
+    # Set joystick axes
+    joy.set_axis(pyvjoy.HID_USAGE_X, axis_x)
+    joy.set_axis(pyvjoy.HID_USAGE_Y, axis_y)
+
+# D-pad state tracking
+dpad_states = {"Up": 0, "Down": 0, "Left": 0, "Right": 0}
+
+# Function to handle D-pad toggle and visual feedback
+def handle_dpad_toggle(direction, rect):
+    """
+    Toggle D-pad button state and update joystick and color.
+    :param direction: D-pad direction (Up, Down, Left, Right)
+    :param rect: Canvas rectangle object for the direction
+    """
+    # Toggle state
+    dpad_states[direction] = 1 - dpad_states[direction]
+    state = dpad_states[direction]
+
+    # Update joystick and color
+    joy.set_button({"Up": 5, "Down": 6, "Left": 7, "Right": 8}[direction], state)
+    color = "blue" if state else "white"
+    dpad_canvas.itemconfig(rect, fill=color)
+
+# Create the main application window
+root = tk.Tk()
+root.title("Joystick Controller")
+
+# Create checkboxes for button controls
+var_a = tk.IntVar()
+var_b = tk.IntVar()
+var_l = tk.IntVar()
+var_r = tk.IntVar()
+var_start = tk.IntVar()
+var_select = tk.IntVar()
+
+# Create checkboxes for button controls
+checkbox_a = ttk.Checkbutton(root, text="A Button", variable=var_a, command=update_button_state)
+checkbox_b = ttk.Checkbutton(root, text="B Button", variable=var_b, command=update_button_state)
+checkbox_l = ttk.Checkbutton(root, text="L Button", variable=var_l, command=update_button_state)
+checkbox_r = ttk.Checkbutton(root, text="R Button", variable=var_r, command=update_button_state)
+checkbox_start = ttk.Checkbutton(root, text="Start Button", variable=var_start, command=update_button_state)
+checkbox_select = ttk.Checkbutton(root, text="Select Button", variable=var_select, command=update_button_state)
+
+# Grid checkboxes
+checkbox_a.grid(row=0, column=0, padx=10, pady=5)
+checkbox_b.grid(row=0, column=1, padx=10, pady=5)
+checkbox_l.grid(row=1, column=0, padx=10, pady=5)
+checkbox_r.grid(row=1, column=1, padx=10, pady=5)
+checkbox_start.grid(row=2, column=0, padx=10, pady=5)
+checkbox_select.grid(row=2, column=1, padx=10, pady=5)
+
+# Create a canvas for the analog stick
+analog_canvas = tk.Canvas(root, width=300, height=300, bg="lightgray")
+analog_canvas.grid(row=5, column=0, columnspan=2, pady=10)
+
+analog_center = (150, 150)  # Center of the analog stick
+analog_radius = 100  # Maximum distance from the center
+
+analog_canvas.create_oval(analog_center[0] - analog_radius, analog_center[1] - analog_radius,
+                          analog_center[0] + analog_radius, analog_center[1] + analog_radius, outline="black")
+analog_stick = analog_canvas.create_oval(analog_center[0] - 10, analog_center[1] - 10,
+                                         analog_center[0] + 10, analog_center[1] + 10, fill="red")
+
+# Bind dragging of the analog stick (red dot)
+analog_canvas.bind("<B1-Motion>", on_analog_drag)
+
+# D-pad UI elements
+dpad_canvas = tk.Canvas(root, width=100, height=100, bg="lightgray")
+dpad_canvas.grid(row=9, column=0, columnspan=2, pady=10)
+
+# Draw D-pad
+dpad_up = dpad_canvas.create_rectangle(35, 5, 65, 35, fill="white", outline="black")  # Up
+dpad_down = dpad_canvas.create_rectangle(35, 65, 65, 95, fill="white", outline="black")  # Down
+dpad_left = dpad_canvas.create_rectangle(5, 35, 35, 65, fill="white", outline="black")  # Left
+dpad_right = dpad_canvas.create_rectangle(65, 35, 95, 65, fill="white", outline="black")  # Right
+
+# Labels for directions
+dpad_canvas.create_text(50, 20, text="Up", font=("Arial", 8))
+dpad_canvas.create_text(50, 80, text="Down", font=("Arial", 8))
+dpad_canvas.create_text(20, 50, text="Left", font=("Arial", 8))
+dpad_canvas.create_text(80, 50, text="Right", font=("Arial", 8))
+
+# Add invisible click regions for the D-pad
+dpad_canvas.create_rectangle(35, 5, 65, 35, fill="", outline="", tags="dpad_up")
+dpad_canvas.create_rectangle(35, 65, 65, 95, fill="", outline="", tags="dpad_down")
+dpad_canvas.create_rectangle(5, 35, 35, 65, fill="", outline="", tags="dpad_left")
+dpad_canvas.create_rectangle(65, 35, 95, 65, fill="", outline="", tags="dpad_right")
+
+# Bindings for toggling D-pad state
+dpad_canvas.tag_bind("dpad_up", "<Button-1>", lambda e: handle_dpad_toggle("Up", dpad_up))
+dpad_canvas.tag_bind("dpad_down", "<Button-1>", lambda e: handle_dpad_toggle("Down", dpad_down))
+dpad_canvas.tag_bind("dpad_left", "<Button-1>", lambda e: handle_dpad_toggle("Left", dpad_left))
+dpad_canvas.tag_bind("dpad_right", "<Button-1>", lambda e: handle_dpad_toggle("Right", dpad_right))
+
+# Angle and Magnitude Input Fields
+angle_label = ttk.Label(root, text="Angle (°):")
+angle_label.grid(row=6, column=0, padx=10, pady=5)
+
+angle_entry = ttk.Entry(root)
+angle_entry.grid(row=6, column=1, padx=10, pady=5)
+
+magnitude_label = ttk.Label(root, text="Magnitude:")
+magnitude_label.grid(row=7, column=0, padx=10, pady=5)
+
+magnitude_entry = ttk.Entry(root)
+magnitude_entry.grid(row=7, column=1, padx=10, pady=5)
+
+# Bind the update function to the Entry widgets
+angle_entry.bind("<KeyRelease>", update_analog_position_from_input)
+magnitude_entry.bind("<KeyRelease>", update_analog_position_from_input)
+
+# Start by resetting joystick
+reset_joystick()
+
+# Run the application
+root.mainloop()
