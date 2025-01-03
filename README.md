@@ -17,7 +17,10 @@ During installation, ensure you check the box to add Python to your system's PAT
 
 # Basic Command Line Knowledge
 
-You’ll need to use the command line to navigate to folders and run commands.
+You’ll need to use the command line to navigate to folders and run commands. You can always open a command line by searching for 'cmd' on your device. common commands:
+
+cd -> set a directory. for instance cd D:\Emulators\Citra\nightly will navigate to the 'nightly' folder.
+cd.. will move one folder back. e.g. D:\Emulators\Citra\nightly and then cd.. gives D:\Emulators\Citra\
 
 # Installation Guide
 Follow these steps to set up the virtual controller:
